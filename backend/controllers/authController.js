@@ -1,49 +1,55 @@
-let users = [];
+const db = require('../config/db');
 
-const registerUser = (req, res) => {
+const registerUser = async (req, res) => {
     try {
-        const { username, password } = req.body;
-        if(!username || !password) {
-            return res.status(400).send('Username and password are required');
-        }
-        const userExists = users.find(user => user.username === username);
-        if(userExists) {
-            return res.status(400).send(`User with username ${username} already exists`);
-        }
-        users.push({ username, password });
-        res.send('User registered');
+        const {firstName, middleName, lastName, email, countryCode, contactNo, address, password} = req.body;
+        // Pushing the data to the database
+        const [result] = await db.query(
+            'INSERT INTO users (first_name, middle_name, last_name, email, country_code, contact_no, address, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [firstName, middleName, lastName, email, countryCode, contactNo, address, password]
+        );
+        res.status(201).json({ message: 'User registered successfully', userId: result.insertId });
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+        // Handle duplicate entry error for unique fields
+        if(error.code === 'ER_DUP_ENTRY') {
+            // Check which field caused the duplicate entry
+            if(error.message.includes('email')) {
+                return res.status(400).json({ error: 'Email already exists' });
+            }
+            if(error.message.includes('contactNo')) {
+                return res.status(400).json({ error: 'Contact number already exists' });
+            }
+        }
+        console.error('Error registering user:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 }
 
 const loginUser = (req, res) => {
     try {
-        const { username, password } = req.body;
-        if(!username || !password) {
-            return res.status(400).send('Username and password are required');
+        const { email, contactNo, password } = req.body;
+        // Check if either email or contactNo is provided
+        if (!email && !contactNo) {
+            return res.status(400).json({ error: 'Email or Contact Number is required' });
         }
-        let user = null;
-        for(let i = 0; i < users.length; i++) {
-            if(users[i].username === username) {
-                user = users[i];
-                break;
-            }
-        }
-        if(!user) {
-            return res.status(400).send(`User with username ${username} does not exist`);
-        }
-        if(user.password !== password) {
-            return res.status(401).send('Invalid credentials');
-        } else {
-            return res.status(200).send('Login successful');
-        }
+        // Query to find user by email or contact number and password
+        db.query('SELECT * FROM users WHERE (email = ? OR contact_no = ?) AND password = ?', [email, contactNo, password])
+            .then(([rows]) => {
+                // If user is found, return success response
+                if (rows.length > 0) {
+                    res.json({ message: 'Login successful', user: rows[0] });
+                } else {
+                    res.status(401).json({ error: 'Invalid email or password' });
+                }
+            })
+            .catch((error) => {
+                console.error('Error logging in user:', error);
+                res.status(500).json({ error: 'Internal Server Error' });
+            });
     } catch (error) {
-        console.error(error);
-        res.status(500).send('Internal Server Error');
+        console.error('Error logging in user:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-    res.send('User logged in');
 }
 
 module.exports = { registerUser, loginUser };
