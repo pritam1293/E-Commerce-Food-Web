@@ -2,11 +2,11 @@ const db = require('../config/db');
 
 const registerUser = async (req, res) => {
     try {
-        const {firstName, middleName, lastName, email, countryCode, contactNo, address, password} = req.body;
+        const {firstName, middleName, lastName, email, contactNo, address, password} = req.body;
         // Pushing the data to the database
         const [result] = await db.query(
-            'INSERT INTO users (first_name, middle_name, last_name, email, country_code, contact_no, address, password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [firstName, middleName, lastName, email, countryCode, contactNo, address, password]
+            'INSERT INTO users (first_name, middle_name, last_name, email, contact_no, address, password) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [firstName, middleName, lastName, email, contactNo, address, password]
         );
         res.status(201).json({ message: 'User registered successfully', userId: result.insertId });
     } catch (error) {
