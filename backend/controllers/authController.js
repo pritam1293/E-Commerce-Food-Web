@@ -1,8 +1,8 @@
-const db = require('../config/db');
+const db = require('../config/userDB');
 
 const registerUser = async (req, res) => {
     try {
-        const {firstName, middleName, lastName, email, contactNo, address, password} = req.body;
+        const { firstName, middleName, lastName, email, contactNo, address, password } = req.body;
         // Pushing the data to the database
         const [result] = await db.query(
             'INSERT INTO users (first_name, middle_name, last_name, email, contact_no, address, password) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -11,12 +11,12 @@ const registerUser = async (req, res) => {
         res.status(201).json({ message: 'User registered successfully', userId: result.insertId });
     } catch (error) {
         // Handle duplicate entry error for unique fields
-        if(error.code === 'ER_DUP_ENTRY') {
+        if (error.code === 'ER_DUP_ENTRY') {
             // Check which field caused the duplicate entry
-            if(error.message.includes('email')) {
+            if (error.message.includes('email')) {
                 return res.status(400).json({ error: 'Email already exists' });
             }
-            if(error.message.includes('contactNo')) {
+            if (error.message.includes('contactNo')) {
                 return res.status(400).json({ error: 'Contact number already exists' });
             }
         }
