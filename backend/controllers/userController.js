@@ -1,6 +1,5 @@
 const userModel = require('../models/userModel');
 
-/* Function to get all users */
 const getAllUsers = async (req, res) => {
     try {
         // Fetch all users from the database
@@ -16,7 +15,6 @@ const getAllUsers = async (req, res) => {
 };
 
 
-/* Function to get a user by ID */
 const getUserById = async (req, res) => {
     try {
         const { id } = req.params;

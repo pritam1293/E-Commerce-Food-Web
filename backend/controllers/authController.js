@@ -28,6 +28,9 @@ const registerUser = async (req, res) => {
         if(!isValidEmail(email)) {
             return res.status(400).json({ error: 'Invalid email format' });
         }
+        if(!isValidPhoneNumber(contactNo)) {
+            return res.status(400).json({ error: 'Invalid contact number format' });
+        }
         // Password validation
         const passwordValidation = PasswordTest(password);
         if (!passwordValidation.valid) {
@@ -64,36 +67,6 @@ const registerUser = async (req, res) => {
         console.error('Error registering user:', error);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
-}
-
-// Function to check if the email is valid or not
-const isValidEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-};
-
-const PasswordTest = (password) => {
-    // Check if password is provided
-    if (!password) {
-        return { valid: false, message: 'Password is required' };
-    }
-    // Spaces in password are not allowed
-    if (/\s/.test(password)) {
-        return { valid: false, message: 'Password should not contain spaces' };
-    }
-    // Password Length validation
-    if (password.length < 6 || password.length > 15) {
-        return { valid: false, message: 'Password must be between 6 and 15 characters' };
-    }
-    // At least one uppercase letter, one lowercase letter, one digit, and one special character
-    const hasUpperCase = /[A-Z]/.test(password);
-    const hasLowerCase = /[a-z]/.test(password);
-    const hasNumber = /\d/.test(password);
-    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
-    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
-        return { valid: false, message: 'Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character' };
-    }
-    return { valid: true };
 }
 
 const loginUser = async (req, res) => {
@@ -178,15 +151,18 @@ const updateUserDetails = async (req, res) => {
         if(!isValidEmail(email)) {
             return res.status(400).json({ error: 'Invalid email format' });
         }
+        if(updatedEmail && !isValidEmail(updatedEmail)) {
+            return res.status(400).json({ error: 'Invalid updated email format' });
+        }
+        if(contactNo && !isValidPhoneNumber(contactNo)) {
+            return res.status(400).json({ error: 'Invalid contact number format' });
+        }
         // Password validation
         if (password) {
             const passwordValidation = PasswordTest(password);
             if (!passwordValidation.valid) {
                 return res.status(400).json({ error: passwordValidation.message });
             }
-        }
-        if(updatedEmail && !isValidEmail(updatedEmail)) {
-            return res.status(400).json({ error: 'Invalid updated email format' });
         }
         // Check if updated email or contact no already exists
         if (updatedEmail) {
@@ -224,4 +200,88 @@ const updateUserDetails = async (req, res) => {
     }
 }
 
-module.exports = { registerUser, loginUser, updateUserDetails };
+const deleteUser = async (req, res) => {
+    try {
+        let {
+            email = null,
+            contactNo = null,
+            password = null
+        } = req.body;
+        // Trim input values to remove leading/trailing spaces
+        email = email ? email.trim() : null;
+        contactNo = contactNo ? contactNo.trim() : null;
+        password = password ? password.trim() : null;
+        // One of email or contactNo and Password is required
+        if ((!email && !contactNo) || !password) {
+            return res.status(400).json({ error: 'Email or Contact Number and Password are required' });
+        }
+        // Email format validation
+        if(email && !isValidEmail(email)) {
+            return res.status(400).json({ error: 'Invalid email format' });
+        }
+        if(contactNo && !isValidPhoneNumber(contactNo)) {
+            return res.status(400).json({ error: 'Invalid contact number format' });
+        }
+        // Password validation
+        const passwordValidation = PasswordTest(password);
+        if (!passwordValidation.valid) {
+            return res.status(400).json({ error: passwordValidation.message });
+        }
+        // If email is provided
+        let userQuery = null;
+        if (email) {
+            userQuery = await UserModel.findOne({ where: { email } });
+        } else if (contactNo) {
+            userQuery = await UserModel.findOne({ where: { contact_no: contactNo } });
+        }
+        if (!userQuery) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        const isPasswordValid = await userQuery.validatePassword(password);
+        if(!isPasswordValid) {
+            return res.status(400).json({ error: 'Invalid credentials' });
+        }
+        await userQuery.destroy();
+        return res.json({ message: 'User deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting user:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+}
+
+const isValidEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+};
+
+const isValidPhoneNumber = (phoneNumber) => {
+    // Country code with mobile number validation (not necessarily 10 digits)
+    const phoneRegex = /^\+?\d{1,4}[\s-]?\d{4,15}$/;
+    return phoneRegex.test(phoneNumber);
+};
+
+const PasswordTest = (password) => {
+    // Check if password is provided
+    if (!password) {
+        return { valid: false, message: 'Password is required' };
+    }
+    // Spaces in password are not allowed
+    if (/\s/.test(password)) {
+        return { valid: false, message: 'Password should not contain spaces' };
+    }
+    // Password Length validation
+    if (password.length < 6 || password.length > 15) {
+        return { valid: false, message: 'Password must be between 6 and 15 characters' };
+    }
+    // At least one uppercase letter, one lowercase letter, one digit, and one special character
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+    if (!hasUpperCase || !hasLowerCase || !hasNumber || !hasSpecialChar) {
+        return { valid: false, message: 'Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character' };
+    }
+    return { valid: true };
+}
+
+module.exports = { registerUser, loginUser, updateUserDetails, deleteUser };
