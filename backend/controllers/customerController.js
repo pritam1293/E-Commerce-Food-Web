@@ -1,10 +1,12 @@
-const db = require('../config/userDB');
+const userModel = require('../models/userModel');
 
 /* Function to get all users */
 const getAllUsers = async (req, res) => {
     try {
         // Fetch all users from the database
-        const [users] = await db.query('SELECT * FROM users');
+        const users = await userModel.findAll({
+            attributes: { exclude: ['password'] } // Exclude password field
+        });
         // Return the list of users in the form of JSON
         res.json(users);
     } catch (error) {
@@ -18,9 +20,11 @@ const getAllUsers = async (req, res) => {
 const getUserById = async (req, res) => {
     try {
         const { id } = req.params;
-        const [user] = await db.query('SELECT * FROM users WHERE id = ?', [id]);
-        // If user is found, return user data, else return 404
-        if (user.length > 0) {
+        // Fetch user by ID from the database
+        const user = await userModel.findByPk(id, {
+            attributes: { exclude: ['password'] } // Exclude password field
+        });
+        if (user) {
             res.json(user);
         } else {
             res.status(404).json({ error: 'User not found' });
