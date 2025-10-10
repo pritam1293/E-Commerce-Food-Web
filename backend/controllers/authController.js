@@ -1,7 +1,9 @@
 const UserModel = require('../models/userModel');
+const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 
 const registerUser = async (req, res) => {
+    const transaction = await sequelize.transaction();
     try {
         let {
             firstName = null, 
@@ -22,27 +24,36 @@ const registerUser = async (req, res) => {
         password = password ? password.trim() : null;
         // Basic validation
         if (!email || !contactNo || !password) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Email, Contact Number and Password are required' });
         }
         // Email format validation
         if(!isValidEmail(email)) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Invalid email format' });
         }
         if(!isValidPhoneNumber(contactNo)) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Invalid contact number format' });
         }
         // Password validation
         const passwordValidation = PasswordTest(password);
         if (!passwordValidation.valid) {
+            await transaction.rollback();
             return res.status(400).json({ error: passwordValidation.message });
         }
         // Check if email or contact no already exists
-        let user = await UserModel.findOne({ where: { email } });
+        let user = await UserModel.findOne({ 
+            where: { email }, 
+            transaction
+        });
         if (user) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Email already exists' });
         }
-        user = await UserModel.findOne({ where: { contact_no: contactNo } });
+        user = await UserModel.findOne({ where: { contact_no: contactNo }, transaction });
         if (user) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Contact number already exists' });
         }
         // Insert new user into the database
@@ -54,12 +65,22 @@ const registerUser = async (req, res) => {
             contact_no: contactNo,
             address,
             password
-        });
+        }, { transaction });
+        await transaction.commit();
         // Return success response with created user details (excluding password)
         const userResponse = newUser.toJSON();
         delete userResponse.password;
         return res.status(201).json({ message: 'User registered successfully', userDetails: userResponse });
     } catch (error) {
+        await transaction.rollback();
+        // Handle Sequelize unique constraint errors, race condition protection
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            const field = Object.keys(error.fields)[0];
+            const fieldName = field.replace('_', ' ');
+            return res.status(400).json({
+                error: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} already exists`
+            });
+        }
         // Handle Sequelize validation errors
         if(error.name === 'SequelizeValidationError') {
             return res.status(400).json({ error: error.errors.map(e => e.message) });
@@ -122,6 +143,7 @@ const loginUser = async (req, res) => {
 }
 
 const updateUserDetails = async (req, res) => {
+    const transaction = await sequelize.transaction();
     try {
         // Implementation for updating user details
         let {
@@ -146,39 +168,56 @@ const updateUserDetails = async (req, res) => {
         // If a field is null then it will not be updated
         // Email format validation
         if (!email) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Current email is required to identify user' });
         }
         if(!isValidEmail(email)) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Invalid email format' });
         }
         if(updatedEmail && !isValidEmail(updatedEmail)) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Invalid updated email format' });
         }
         if(contactNo && !isValidPhoneNumber(contactNo)) {
+            await transaction.rollback();
             return res.status(400).json({ error: 'Invalid contact number format' });
         }
         // Password validation
         if (password) {
             const passwordValidation = PasswordTest(password);
             if (!passwordValidation.valid) {
+                await transaction.rollback();
                 return res.status(400).json({ error: passwordValidation.message });
             }
         }
         // Check if updated email or contact no already exists
         if (updatedEmail) {
-            let user = await UserModel.findOne({ where: { email: updatedEmail } });
+            let user = await UserModel.findOne({ 
+                where: { email: updatedEmail }, 
+                transaction
+            });
             if (user) {
+                await transaction.rollback();
                 return res.status(400).json({ error: 'Updated email already exists' });
             }
         }
         if (contactNo) {
-            let user = await UserModel.findOne({ where: { contact_no: contactNo } });
+            let user = await UserModel.findOne({ 
+                where: { contact_no: contactNo }, 
+                transaction
+            });
             if (user) {
+                await transaction.rollback();
                 return res.status(400).json({ error: 'Contact number already exists' });
             }
         }
-        const userDetails = await UserModel.findOne({ where: { email } });
+        const userDetails = await UserModel.findOne({ 
+            where: { email },
+            transaction
+        });
         if (!userDetails) {
+            await transaction.rollback();
             return res.status(404).json({ error: 'User not found' });
         }
         // Update the fields if they are provided i.e. not null
@@ -190,11 +229,26 @@ const updateUserDetails = async (req, res) => {
         if (address !== null && address !== userDetails.address) userDetails.address = address;
         // Hashing of password will be done in the model hook
         if (password !== null) userDetails.password = password;
-        await userDetails.save();
+        await userDetails.save({ transaction });
+        await transaction.commit();
+        // Return success response with updated user details (excluding password)
         const updatedUserDetails = userDetails.toJSON();
         delete updatedUserDetails.password;
         return res.json({ message: 'User details updated successfully', user: updatedUserDetails });
     } catch (error) {
+        await transaction.rollback();
+        // Handle Sequelize unique constraint errors, race condition protection
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            const field = Object.keys(error.fields)[0];
+            const fieldName = field.replace('_', ' ');
+            return res.status(400).json({
+                error: `${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} already exists`
+            });
+        }
+        // Handle Sequelize validation errors
+        if(error.name === 'SequelizeValidationError') {
+            return res.status(400).json({ error: error.errors.map(e => e.message) });
+        }
         console.error('Error updating user details:', error);
         return res.status(500).json({ error: 'Internal Server Error' });
     }
