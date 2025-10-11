@@ -312,6 +312,35 @@ const updateProductDetails = async (req, res) => {
     }
 }
 
+const deleteProductById = async (req, res) => {
+    const transaction = await sequelize.transaction();
+
+    try {
+        let { id: productId } = req.params;
+        productId = productId ? productId.trim().replace(/\s+/g, '').toLowerCase() : null;
+        if (!productId || productId.length === 0) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid or missing productId' });
+        }
+        const product = await Product.findOne({
+            where: { product_id: productId },
+            transaction
+        });
+        if (!product) {
+            await transaction.rollback();
+            return res.status(404).json({ error: 'Product not found' });
+        }
+        await product.destroy({ transaction });
+        await transaction.commit();
+
+        return res.status(200).json({ message: 'Product deleted successfully' });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Error deleting product:', error);
+        return res.status(500).json({ error: 'Failed to delete product' });
+    }
+}
+
 const generateProductId = () => {
     const characters = 'abcdefghijklmnopqrstuvwxyz0123456789';
     let productId = '';
@@ -325,5 +354,6 @@ module.exports = {
     registerProduct,
     getAllProducts,
     getProductById,
-    updateProductDetails
+    updateProductDetails,
+    deleteProductById
 };
