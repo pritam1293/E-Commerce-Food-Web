@@ -1,17 +1,18 @@
 const UserModel = require('../models/userModel');
 const sequelize = require('../config/database');
 const { Op } = require('sequelize');
+const jwt = require('jsonwebtoken');
 
 const registerUser = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
         let {
-            firstName = null, 
-            middleName = null, 
-            lastName = null, 
-            email = null, 
-            contactNo = null, 
-            address = null, 
+            firstName = null,
+            middleName = null,
+            lastName = null,
+            email = null,
+            contactNo = null,
+            address = null,
             password = null
         } = req.body;
         // Trim input values to remove leading/trailing spaces
@@ -28,11 +29,11 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ error: 'Email, Contact Number and Password are required' });
         }
         // Email format validation
-        if(!isValidEmail(email)) {
+        if (!isValidEmail(email)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid email format' });
         }
-        if(!isValidPhoneNumber(contactNo)) {
+        if (!isValidPhoneNumber(contactNo)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid contact number format' });
         }
@@ -43,8 +44,8 @@ const registerUser = async (req, res) => {
             return res.status(400).json({ error: passwordValidation.message });
         }
         // Check if email or contact no already exists
-        let user = await UserModel.findOne({ 
-            where: { email }, 
+        let user = await UserModel.findOne({
+            where: { email },
             transaction
         });
         if (user) {
@@ -70,7 +71,21 @@ const registerUser = async (req, res) => {
         // Return success response with created user details (excluding password)
         const userResponse = newUser.toJSON();
         delete userResponse.password;
-        return res.status(201).json({ message: 'User registered successfully', userDetails: userResponse });
+
+        const authToken = jwt.sign(
+            {
+                id: userResponse.id,
+                email: userResponse.email
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '28d' }
+        );
+
+        return res.status(201).json({ 
+            message: 'User registered successfully', 
+            userDetails: userResponse,
+            token: authToken
+        });
     } catch (error) {
         await transaction.rollback();
         // Handle Sequelize unique constraint errors, race condition protection
@@ -82,7 +97,7 @@ const registerUser = async (req, res) => {
             });
         }
         // Handle Sequelize validation errors
-        if(error.name === 'SequelizeValidationError') {
+        if (error.name === 'SequelizeValidationError') {
             return res.status(400).json({ error: error.errors.map(e => e.message) });
         }
         console.error('Error registering user:', error);
@@ -93,9 +108,9 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
     try {
         let {
-            email = null, 
-            contactNo = null, 
-            password = null 
+            email = null,
+            contactNo = null,
+            password = null
         } = req.body;
         // Trim input values to remove leading/trailing spaces
         email = email ? email.trim() : null;
@@ -106,7 +121,7 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ error: 'Password should not contain spaces' });
         }
         // Email format validation
-        if(email && !isValidEmail(email)) {
+        if (email && !isValidEmail(email)) {
             return res.status(400).json({ error: 'Invalid email format' });
         }
         // Check if either email or contactNo is provided
@@ -129,10 +144,25 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
         const isPasswordValid = await userQuery.validatePassword(password);
-        if(isPasswordValid) {
+        if (isPasswordValid) {
             const userResponse = userQuery.toJSON();
             delete userResponse.password;
-            return res.json({ message: 'Login successful', user: userResponse });
+
+            // Generate JWT token with user ID and email
+            const authToken = jwt.sign(
+                {
+                    id: userResponse.id,
+                    email: userResponse.email
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: '28d' }
+            );
+
+            return res.json({
+                message: 'Login successful',
+                user: userResponse,
+                token: authToken
+            });
         } else {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
@@ -145,56 +175,59 @@ const loginUser = async (req, res) => {
 const updateUserDetails = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
-        // Implementation for updating user details
+        // Get user ID from JWT token (set by authenticateToken middleware)
+        const userId = req.user.id;
+
         let {
-            email = null, 
-            updatedEmail = null, 
-            firstName = null, 
-            middleName = null, 
-            lastName = null, 
-            contactNo = null, 
-            address = null, 
-            password = null
+            updatedEmail = null,
+            firstName = null,
+            middleName = null,
+            lastName = null,
+            contactNo = null,
+            address = null,
+            currentPassword = null,
+            newPassword = null,
         } = req.body;
         // Trim input values to remove leading/trailing spaces
-        email = email ? email.trim() : null;
         updatedEmail = updatedEmail ? updatedEmail.trim() : null;
-        firstName = firstName ? firstName.trim() : null;    
+        firstName = firstName ? firstName.trim() : null;
         middleName = middleName ? middleName.trim() : null;
         lastName = lastName ? lastName.trim() : null;
         contactNo = contactNo ? contactNo.trim() : null;
         address = address ? address.trim() : null;
-        password = password ? password.trim() : null;
-        // If a field is null then it will not be updated
-        // Email format validation
-        if (!email) {
-            await transaction.rollback();
-            return res.status(400).json({ error: 'Current email is required to identify user' });
-        }
-        if(!isValidEmail(email)) {
-            await transaction.rollback();
-            return res.status(400).json({ error: 'Invalid email format' });
-        }
-        if(updatedEmail && !isValidEmail(updatedEmail)) {
+        currentPassword = currentPassword ? currentPassword.trim() : null;
+        newPassword = newPassword ? newPassword.trim() : null;
+
+        // Validate updated email format if provided
+        if (updatedEmail && !isValidEmail(updatedEmail)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid updated email format' });
         }
-        if(contactNo && !isValidPhoneNumber(contactNo)) {
+        if (contactNo && !isValidPhoneNumber(contactNo)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid contact number format' });
         }
-        // Password validation
-        if (password) {
-            const passwordValidation = PasswordTest(password);
-            if (!passwordValidation.valid) {
+        // Password validation if password change is requested
+        if (currentPassword && newPassword) {
+            const currentPasswordValidation = PasswordTest(currentPassword);
+            const newPasswordValidation = PasswordTest(newPassword);
+            if (!currentPasswordValidation.valid) {
                 await transaction.rollback();
-                return res.status(400).json({ error: passwordValidation.message });
+                return res.status(400).json({ error: 'Current password: ' + currentPasswordValidation.message });
+            }
+            if (!newPasswordValidation.valid) {
+                await transaction.rollback();
+                return res.status(400).json({ error: 'New password: ' + newPasswordValidation.message });
             }
         }
-        // Check if updated email or contact no already exists
+
+        // Check if updated email or contact no already exists (for other users)
         if (updatedEmail) {
-            let user = await UserModel.findOne({ 
-                where: { email: updatedEmail }, 
+            let user = await UserModel.findOne({
+                where: {
+                    email: updatedEmail,
+                    id: { [Op.ne]: userId }  // Exclude current user
+                },
                 transaction
             });
             if (user) {
@@ -203,8 +236,11 @@ const updateUserDetails = async (req, res) => {
             }
         }
         if (contactNo) {
-            let user = await UserModel.findOne({ 
-                where: { contact_no: contactNo }, 
+            let user = await UserModel.findOne({
+                where: {
+                    contact_no: contactNo,
+                    id: { [Op.ne]: userId }  // Exclude current user
+                },
                 transaction
             });
             if (user) {
@@ -212,29 +248,64 @@ const updateUserDetails = async (req, res) => {
                 return res.status(400).json({ error: 'Contact number already exists' });
             }
         }
-        const userDetails = await UserModel.findOne({ 
-            where: { email },
-            transaction
-        });
+
+        // Find user by ID from token (not from request body)
+        const userDetails = await UserModel.findByPk(userId, { transaction });
+
         if (!userDetails) {
             await transaction.rollback();
             return res.status(404).json({ error: 'User not found' });
         }
+
         // Update the fields if they are provided i.e. not null
+        let isEmailUpdated = false;
+        let isPasswordChanged = false;
         if (firstName !== null && firstName !== userDetails.first_name) userDetails.first_name = firstName;
         if (middleName !== null && middleName !== userDetails.middle_name) userDetails.middle_name = middleName;
         if (lastName !== null && lastName !== userDetails.last_name) userDetails.last_name = lastName;
-        if (updatedEmail !== null && updatedEmail !== userDetails.email) userDetails.email = updatedEmail;
+        if (updatedEmail !== null && updatedEmail !== userDetails.email) {
+            userDetails.email = updatedEmail;
+            isEmailUpdated = true;
+        }
         if (contactNo !== null && contactNo !== userDetails.contact_no) userDetails.contact_no = contactNo;
         if (address !== null && address !== userDetails.address) userDetails.address = address;
-        // Hashing of password will be done in the model hook
-        if (password !== null) userDetails.password = password;
+        if(currentPassword !== null && newPassword !== null) {
+            const isCurrentPasswordValid = await userDetails.validatePassword(currentPassword);
+            if (!isCurrentPasswordValid) {
+                await transaction.rollback();
+                return res.status(400).json({ error: 'Current password is incorrect' });
+            }
+            const isSamePassword = await userDetails.validatePassword(newPassword);
+            if (isSamePassword) {
+                await transaction.rollback();
+                return res.status(400).json({ error: 'New password must be different from current password' });
+            }
+            userDetails.password = newPassword;
+            isPasswordChanged = true;
+        }
         await userDetails.save({ transaction });
         await transaction.commit();
+
         // Return success response with updated user details (excluding password)
         const updatedUserDetails = userDetails.toJSON();
         delete updatedUserDetails.password;
-        return res.json({ message: 'User details updated successfully', user: updatedUserDetails });
+        let newAuthToken = null;
+        if (isEmailUpdated || isPasswordChanged) {
+            newAuthToken = jwt.sign(
+                {
+                    id: updatedUserDetails.id,
+                    email: updatedUserDetails.email
+                },
+                process.env.JWT_SECRET,
+                { expiresIn: '28d' }
+            );
+        }
+        return res.json({ 
+            message: 'User details updated successfully', 
+            user: updatedUserDetails,
+            // Return new token if email or password was changed otherwise no token
+            ...(newAuthToken && { token: newAuthToken })
+        });
     } catch (error) {
         await transaction.rollback();
         // Handle Sequelize unique constraint errors, race condition protection
@@ -246,7 +317,7 @@ const updateUserDetails = async (req, res) => {
             });
         }
         // Handle Sequelize validation errors
-        if(error.name === 'SequelizeValidationError') {
+        if (error.name === 'SequelizeValidationError') {
             return res.status(400).json({ error: error.errors.map(e => e.message) });
         }
         console.error('Error updating user details:', error);
@@ -256,45 +327,38 @@ const updateUserDetails = async (req, res) => {
 
 const deleteUser = async (req, res) => {
     try {
-        let {
-            email = null,
-            contactNo = null,
-            password = null
-        } = req.body;
+        // Get user ID from JWT token (set by authenticateToken middleware)
+        const userId = req.user.id;
+
+        let { password = null } = req.body;
+
         // Trim input values to remove leading/trailing spaces
-        email = email ? email.trim() : null;
-        contactNo = contactNo ? contactNo.trim() : null;
         password = password ? password.trim() : null;
-        // One of email or contactNo and Password is required
-        if ((!email && !contactNo) || !password) {
-            return res.status(400).json({ error: 'Email or Contact Number and Password are required' });
+
+        // Password is required for confirmation
+        if (!password) {
+            return res.status(400).json({ error: 'Password is required for account deletion' });
         }
-        // Email format validation
-        if(email && !isValidEmail(email)) {
-            return res.status(400).json({ error: 'Invalid email format' });
-        }
-        if(contactNo && !isValidPhoneNumber(contactNo)) {
-            return res.status(400).json({ error: 'Invalid contact number format' });
-        }
+
         // Password validation
         const passwordValidation = PasswordTest(password);
         if (!passwordValidation.valid) {
             return res.status(400).json({ error: passwordValidation.message });
         }
-        // If email is provided
-        let userQuery = null;
-        if (email) {
-            userQuery = await UserModel.findOne({ where: { email } });
-        } else if (contactNo) {
-            userQuery = await UserModel.findOne({ where: { contact_no: contactNo } });
-        }
+
+        // Find user by ID from token
+        const userQuery = await UserModel.findByPk(userId);
+
         if (!userQuery) {
             return res.status(404).json({ error: 'User not found' });
         }
+
+        // Verify password before deletion
         const isPasswordValid = await userQuery.validatePassword(password);
-        if(!isPasswordValid) {
-            return res.status(400).json({ error: 'Invalid credentials' });
+        if (!isPasswordValid) {
+            return res.status(400).json({ error: 'Invalid password' });
         }
+
         await userQuery.destroy();
         return res.json({ message: 'User deleted successfully' });
     } catch (error) {
