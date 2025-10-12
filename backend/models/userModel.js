@@ -40,6 +40,11 @@ const UserModel = sequelize.define('User', {
     password: {
         type: DataTypes.STRING(255),
         allowNull: false
+    },
+    role: {
+        type: DataTypes.ENUM('admin', 'user'),
+        allowNull: false,
+        defaultValue: 'user'
     }
 }, {
     tableName: 'users',

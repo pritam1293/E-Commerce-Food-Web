@@ -13,7 +13,8 @@ const registerUser = async (req, res) => {
             email = null,
             contactNo = null,
             address = null,
-            password = null
+            password = null,
+            adminSecretCode = null
         } = req.body;
         // Trim input values to remove leading/trailing spaces
         firstName = firstName ? firstName.trim() : null;
@@ -57,6 +58,15 @@ const registerUser = async (req, res) => {
             await transaction.rollback();
             return res.status(400).json({ error: 'Contact number already exists' });
         }
+        let role = 'user';
+        if (adminSecretCode) {
+            if (adminSecretCode === process.env.ADMIN_SECRET_CODE) {
+                role = 'admin';
+            } else {
+                await transaction.rollback();
+                return res.status(400).json({ error: 'Invalid admin secret code' });
+            }
+        }
         // Insert new user into the database
         const newUser = await UserModel.create({
             first_name: firstName,
@@ -65,7 +75,8 @@ const registerUser = async (req, res) => {
             email,
             contact_no: contactNo,
             address,
-            password
+            password,
+            role
         }, { transaction });
         await transaction.commit();
         // Return success response with created user details (excluding password)
@@ -75,7 +86,8 @@ const registerUser = async (req, res) => {
         const authToken = jwt.sign(
             {
                 id: userResponse.id,
-                email: userResponse.email
+                email: userResponse.email,
+                role: userResponse.role
             },
             process.env.JWT_SECRET,
             { expiresIn: '28d' }
@@ -152,7 +164,8 @@ const loginUser = async (req, res) => {
             const authToken = jwt.sign(
                 {
                     id: userResponse.id,
-                    email: userResponse.email
+                    email: userResponse.email,
+                    role: userResponse.role
                 },
                 process.env.JWT_SECRET,
                 { expiresIn: '28d' }
@@ -294,7 +307,8 @@ const updateUserDetails = async (req, res) => {
             newAuthToken = jwt.sign(
                 {
                     id: updatedUserDetails.id,
-                    email: updatedUserDetails.email
+                    email: updatedUserDetails.email,
+                    role: updatedUserDetails.role
                 },
                 process.env.JWT_SECRET,
                 { expiresIn: '28d' }
