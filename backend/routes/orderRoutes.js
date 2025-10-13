@@ -1,11 +1,13 @@
 const express = require('express');
-const { route } = require('./authRoutes');
 const router = express.Router();
 
-router.post('/create', (req, res) => {
-  // Order creation logic here
-  res.send('Order created');
-});
+const { placeOrder, updateOrderStatus } = require('../controllers/orderController');
+const { authenticateToken } = require('../middleware/authMiddleware');
+const { isAdmin } = require('../middleware/roleMiddleware');
+
+router.post('/place-order', authenticateToken, placeOrder);
+
+router.put('/update-order-status', authenticateToken, isAdmin, updateOrderStatus);
 
 router.get('/:orderId', (req, res) => {
   // Fetch order details logic here
