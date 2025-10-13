@@ -11,6 +11,24 @@ const registerProduct = async (req, res) => {
             imageUrl = null,
             sizes = null
         } = req.body;
+        // Validation of the data types
+        if(productType !== null && typeof productType !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for productType' });
+        }
+        if(title !== null && typeof title !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for title' });
+        }
+        if(imageUrl !== null && typeof imageUrl !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for imageUrl' });
+        }
+        if(sizes !== null && !Array.isArray(sizes)) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Sizes must be an array' });
+        }
+
         // Validation of the request body
         productType = productType ? productType.trim().replace(/\s+/g, '').toLowerCase() : null;
         if (!productType || !['burger', 'pizza', 'cake'].includes(productType)) {
@@ -59,11 +77,26 @@ const registerProduct = async (req, res) => {
             return res.status(400).json({ error: 'Sizes array must contain valid size objects' });
         }
 
+        // Check if a product with the same title and type already exists
+        let existingProduct = await Product.findOne({
+            where: { title: title, product_type: productType },
+            transaction
+        });
+
+        if (existingProduct) {
+            await transaction.rollback();
+            return res.status(400).json({ 
+                error: `Product with title "${title}" already exists for type "${productType}"`,
+                product: existingProduct,
+                message: 'Use update option to modify the product details'
+            });
+        }
+
         // Generate a unique product_id
         let productId = generateProductId();
         let attemptToRegenerate = 0;
         // If the generated productId already exists, regenerate
-        let existingProduct = await Product.findOne({
+        existingProduct = await Product.findOne({
             where: { product_id: productId },
             transaction
         });
@@ -181,6 +214,27 @@ const updateProductDetails = async (req, res) => {
             sizes = null
         } = req.body;
 
+        // Validation of the data types
+        if(productId !== null && typeof productId !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for productId' });
+        }
+        if(productType !== null && typeof productType !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for productType' });
+        }
+        if(title !== null && typeof title !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for title' });
+        }
+        if(imageUrl !== null && typeof imageUrl !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for imageUrl' });
+        }
+        if(sizes !== null && !Array.isArray(sizes)) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Sizes must be an array' });
+        }
         // Validation of the request body
         productId = productId ? productId.trim().replace(/\s+/g, '').toLowerCase() : null;
         if (!productId || productId.length === 0) {

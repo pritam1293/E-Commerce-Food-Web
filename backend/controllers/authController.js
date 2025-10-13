@@ -16,6 +16,40 @@ const registerUser = async (req, res) => {
             password = null,
             adminSecretCode = null
         } = req.body;
+        // Validate the data types
+        if (typeof firstName !== 'string' && firstName !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for first name' });
+        }
+        if (typeof middleName !== 'string' && middleName !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for middle name' });
+        }
+        if (typeof lastName !== 'string' && lastName !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for last name' });
+        }
+        if (typeof email !== 'string' && email !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for email' });
+        }
+        if (typeof contactNo !== 'string' && contactNo !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for contact number' });
+        }
+        if (typeof address !== 'string' && address !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for address' });
+        }
+        if (typeof password !== 'string' && password !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for password' });
+        }
+        if (typeof adminSecretCode !== 'string' && adminSecretCode !== null) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for admin secret code' });
+        }
+
         // Trim input values to remove leading/trailing spaces
         firstName = firstName ? firstName.trim() : null;
         middleName = middleName ? middleName.trim() : null;
@@ -124,6 +158,16 @@ const loginUser = async (req, res) => {
             contactNo = null,
             password = null
         } = req.body;
+        // Validation of the data types
+        if (email !== null && typeof email !== 'string') {
+            return res.status(400).json({ error: 'Invalid data type for email' });
+        }
+        if (contactNo !== null && typeof contactNo !== 'string') {
+            return res.status(400).json({ error: 'Invalid data type for contact number' });
+        }
+        if (password !== null && typeof password !== 'string') {
+            return res.status(400).json({ error: 'Invalid data type for password' });
+        }
         // Trim input values to remove leading/trailing spaces
         email = email ? email.trim() : null;
         contactNo = contactNo ? contactNo.trim() : null;
@@ -201,6 +245,39 @@ const updateUserDetails = async (req, res) => {
             currentPassword = null,
             newPassword = null,
         } = req.body;
+        // Validate the data types
+        if (updatedEmail != null && typeof updatedEmail !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for updated email' });
+        }
+        if (firstName != null && typeof firstName !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for first name' });
+        }
+        if (middleName != null && typeof middleName !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for middle name' });
+        }
+        if (lastName != null && typeof lastName !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for last name' });
+        }
+        if (contactNo != null && typeof contactNo !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for contact number' });
+        }
+        if (address != null && typeof address !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for address' });
+        }
+        if (currentPassword != null && typeof currentPassword !== 'string') {   
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for current password' });
+        }
+        if (newPassword != null && typeof newPassword !== 'string') {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Invalid data type for new password' });
+        }
         // Trim input values to remove leading/trailing spaces
         updatedEmail = updatedEmail ? updatedEmail.trim() : null;
         firstName = firstName ? firstName.trim() : null;
