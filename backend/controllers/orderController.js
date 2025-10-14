@@ -167,7 +167,7 @@ const updateOrderStatus = async (req, res) => {
     const transaction = await sequelize.transaction();
 
     try {
-        let { orderId, status } = req.body;
+        let { orderId = null, status = null } = req.body;
         if (typeof orderId !== 'string' || !orderId.trim()) {
             await transaction.rollback();
             return res.status(400).json({ error: 'A valid orderId is required' });

@@ -128,7 +128,7 @@ const registerUser = async (req, res) => {
         );
 
         return res.status(201).json({ 
-            message: 'User registered successfully', 
+            message: `User registered successfully${role === 'admin' ? ' as an admin' : ''}`, 
             userDetails: userResponse,
             token: authToken
         });

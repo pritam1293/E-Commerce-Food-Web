@@ -4,7 +4,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const productRoutes = require('./routes/productRoutes');
-const customerRoutes = require('./routes/userRoutes');
+const userRoutes = require('./routes/userRoutes');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -17,7 +17,7 @@ app.use(cors());
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/products', productRoutes);
-app.use('/api/users', customerRoutes);
+app.use('/api/users', userRoutes);
 
 // Start server
 app.listen(PORT, () => {
