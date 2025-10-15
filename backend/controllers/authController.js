@@ -3,6 +3,8 @@ const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
 
+const { clearUsersCache  } = require('../utils/cache');
+
 const registerUser = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
@@ -116,6 +118,9 @@ const registerUser = async (req, res) => {
         // Return success response with created user details (excluding password)
         const userResponse = newUser.toJSON();
         delete userResponse.password;
+
+        // Clear users cache
+        clearUsersCache();
 
         const authToken = jwt.sign(
             {

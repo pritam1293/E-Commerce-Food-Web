@@ -1,5 +1,6 @@
 const { Product, ProductSize } = require('../models');
 const sequelize = require('../config/database');
+const { cache, CACHE_KEYS, CACHE_TTL, clearProductsCache } = require('../utils/cache');
 
 const registerProduct = async (req, res) => {
     const transaction = await sequelize.transaction();
@@ -12,19 +13,19 @@ const registerProduct = async (req, res) => {
             sizes = null
         } = req.body;
         // Validation of the data types
-        if(productType !== null && typeof productType !== 'string') {
+        if (productType !== null && typeof productType !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for productType' });
         }
-        if(title !== null && typeof title !== 'string') {
+        if (title !== null && typeof title !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for title' });
         }
-        if(imageUrl !== null && typeof imageUrl !== 'string') {
+        if (imageUrl !== null && typeof imageUrl !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for imageUrl' });
         }
-        if(sizes !== null && !Array.isArray(sizes)) {
+        if (sizes !== null && !Array.isArray(sizes)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Sizes must be an array' });
         }
@@ -72,7 +73,7 @@ const registerProduct = async (req, res) => {
             return res.status(400).json({ error: 'Duplicate sizes are not allowed' });
         }
 
-        if(sizes.length === 0) {
+        if (sizes.length === 0) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Sizes array must contain valid size objects' });
         }
@@ -85,7 +86,7 @@ const registerProduct = async (req, res) => {
 
         if (existingProduct) {
             await transaction.rollback();
-            return res.status(400).json({ 
+            return res.status(400).json({
                 error: `Product with title "${title}" already exists for type "${productType}"`,
                 product: existingProduct,
                 message: 'Use update option to modify the product details'
@@ -109,7 +110,7 @@ const registerProduct = async (req, res) => {
             attemptToRegenerate++;
         }
 
-        if(attemptToRegenerate === 10 && existingProduct) {
+        if (attemptToRegenerate === 10 && existingProduct) {
             await transaction.rollback();
             return res.status(500).json({ error: 'Failed to generate unique product ID. Please try again.' });
         }
@@ -132,6 +133,9 @@ const registerProduct = async (req, res) => {
         // Bulk create sizes
         await ProductSize.bulkCreate(sizesData, { transaction });
         await transaction.commit();
+
+        // Clear products cache after creating new product
+        clearProductsCache();
 
         await newProduct.reload({
             include: [{ model: ProductSize, as: 'sizes' }]
@@ -158,7 +162,19 @@ const registerProduct = async (req, res) => {
 
 const getAllProducts = async (req, res) => {
     try {
-        // Fetch all available products with their sizes
+        // Check cache first
+        const cacheKey = CACHE_KEYS.ALL_PRODUCTS;
+        const cachedProducts = cache.get(cacheKey);
+
+        if (cachedProducts) {
+            return res.status(200).json({
+                message: 'Products retrieved successfully (from cache)',
+                products: cachedProducts,
+                cached: true
+            });
+        }
+
+        // Cache miss - fetch from database
         const products = await Product.findAll({
             include: [{
                 model: ProductSize,
@@ -167,9 +183,14 @@ const getAllProducts = async (req, res) => {
                 required: false  // Include products even if they have no available sizes
             }]
         });
+
+        // Store in cache for 6 hours
+        cache.set(cacheKey, products, CACHE_TTL.PRODUCTS);
+
         return res.status(200).json({
             message: 'Products retrieved successfully',
-            products
+            products: products,
+            cached: false
         });
     } catch (error) {
         console.error('Error fetching products:', error);
@@ -215,23 +236,23 @@ const updateProductDetails = async (req, res) => {
         } = req.body;
 
         // Validation of the data types
-        if(productId !== null && typeof productId !== 'string') {
+        if (productId !== null && typeof productId !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for productId' });
         }
-        if(productType !== null && typeof productType !== 'string') {
+        if (productType !== null && typeof productType !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for productType' });
         }
-        if(title !== null && typeof title !== 'string') {
+        if (title !== null && typeof title !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for title' });
         }
-        if(imageUrl !== null && typeof imageUrl !== 'string') {
+        if (imageUrl !== null && typeof imageUrl !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for imageUrl' });
         }
-        if(sizes !== null && !Array.isArray(sizes)) {
+        if (sizes !== null && !Array.isArray(sizes)) {
             await transaction.rollback();
             return res.status(400).json({ error: 'Sizes must be an array' });
         }
@@ -350,6 +371,9 @@ const updateProductDetails = async (req, res) => {
         // Commit transaction
         await transaction.commit();
 
+        // Clear products cache after updating product
+        clearProductsCache();
+
         // Reload product with sizes
         await product.reload({
             include: [{ model: ProductSize, as: 'sizes' }]
@@ -386,6 +410,9 @@ const deleteProductById = async (req, res) => {
         }
         await product.destroy({ transaction });
         await transaction.commit();
+
+        // Clear products cache after deleting product
+        clearProductsCache();
 
         return res.status(200).json({ message: 'Product deleted successfully' });
     } catch (error) {

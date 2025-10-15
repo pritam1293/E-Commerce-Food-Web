@@ -7,6 +7,8 @@ const sequelize = require('../config/database');
 const { stack } = require('sequelize/lib/utils');
 const { or } = require('sequelize');
 
+const { clearUserOrdersCache, clearUserCartCache } = require('../utils/cache');
+
 const placeOrder = async (req, res) => {
     const transaction = await sequelize.transaction();
 
@@ -143,6 +145,9 @@ const placeOrder = async (req, res) => {
         }
 
         await transaction.commit();
+        // Clear user's orders and cart cache
+        clearUserOrdersCache(user.email);
+        clearUserCartCache(user.email);
         return res.status(201).json({
             message: 'Order placed successfully',
             orderId: orderId,
@@ -157,7 +162,7 @@ const placeOrder = async (req, res) => {
             timestamp: new Date().toISOString()
         });
         await transaction.rollback();
-        return res.status(500).json({ 
+        return res.status(500).json({
             error: 'Could not place the order, please try again'
         });
     }
@@ -176,7 +181,7 @@ const updateOrderStatus = async (req, res) => {
             await transaction.rollback();
             return res.status(400).json({ error: 'A valid status is required (Pending, Processing, Shipped, Delivered, Cancelled)' });
         }
-        const order = await OrderModel.findOne({ 
+        const order = await OrderModel.findOne({
             where: { order_id: orderId },
             lock: transaction.LOCK.UPDATE,
             transaction
@@ -185,7 +190,7 @@ const updateOrderStatus = async (req, res) => {
             await transaction.rollback();
             return res.status(404).json({ error: `Order with ID ${orderId} not found` });
         }
-        if(order.status === status) {
+        if (order.status === status) {
             await transaction.rollback();
             return res.status(400).json({ error: `Order is already in status ${status}` });
         }
@@ -193,7 +198,7 @@ const updateOrderStatus = async (req, res) => {
         order.status = status;
         await order.save({ transaction });
         await transaction.commit();
-        return res.status(200).json({ 
+        return res.status(200).json({
             message: 'Order status updated successfully',
             orderId: orderId,
             previousStatus: PreviousStatus,
