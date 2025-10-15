@@ -6,7 +6,9 @@ const {
     getUserById, 
     getMyOrderHistory, 
     getUserOrderHistory, 
-    getUserOrderByOrderId 
+    getUserOrderByOrderId,
+    addToCart,
+    getMyCart
 } = require('../controllers/userController');
 
 const { authenticateToken } = require('../middleware/authMiddleware');
@@ -18,6 +20,10 @@ router.get('/', authenticateToken, isAdmin, getAllUsers);
 router.get('/my-orders', authenticateToken, getMyOrderHistory);
 
 router.get('/order', authenticateToken, isAdmin, getUserOrderByOrderId);
+
+router.put('/add-to-cart', authenticateToken, addToCart);
+
+router.get('/cart', authenticateToken, getMyCart);
 
 router.get('/:id', authenticateToken, isAdmin, getUserById);
 
