@@ -469,8 +469,8 @@ const isValidEmail = (email) => {
 };
 
 const isValidPhoneNumber = (phoneNumber) => {
-    // Country code with mobile number validation (not necessarily 10 digits)
-    const phoneRegex = /^\+?\d{1,4}[\s-]?\d{4,15}$/;
+    // Only Indian country code is allowed e.g +91-XXXXXXXXXX or +91 XXXXXXXXXX or XXXXXXXXXX
+    const phoneRegex = /^(?:\+91[-\s]?|0)?[6-9]\d{9}$/;
     return phoneRegex.test(phoneNumber);
 };
 

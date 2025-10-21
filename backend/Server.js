@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const { generalLimiter } = require('./middleware/rateLimiter');
 const authRoutes = require('./routes/authRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const productRoutes = require('./routes/productRoutes');
@@ -13,6 +14,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 // Middleware for CORS
 app.use(cors());
+
+// Apply general rate limiter to all routes
+app.use(generalLimiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', orderRoutes);

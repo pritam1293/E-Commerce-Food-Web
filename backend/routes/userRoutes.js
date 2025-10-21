@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 
-const { 
-    getAllUsers, 
-    getUserById, 
-    getMyOrderHistory, 
-    getUserOrderHistory, 
+const {
+    getAllUsers,
+    getUserById,
+    getMyOrderHistory,
+    getUserOrderHistory,
     getUserOrderByOrderId,
     addToCart,
     getMyCart
@@ -15,13 +15,15 @@ const { authenticateToken } = require('../middleware/authMiddleware');
 
 const { isAdmin } = require('../middleware/roleMiddleware');
 
+const { moderateLimiter } = require('../middleware/rateLimiter');
+
 router.get('/', authenticateToken, isAdmin, getAllUsers);
 
 router.get('/my-orders', authenticateToken, getMyOrderHistory);
 
 router.get('/order', authenticateToken, isAdmin, getUserOrderByOrderId);
 
-router.put('/add-to-cart', authenticateToken, addToCart);
+router.put('/add-to-cart', authenticateToken, moderateLimiter, addToCart);
 
 router.get('/cart', authenticateToken, getMyCart);
 

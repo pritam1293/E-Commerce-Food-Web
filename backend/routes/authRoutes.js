@@ -3,14 +3,15 @@ const router = express.Router();
 
 const { registerUser, loginUser, updateUserDetails, deleteUser } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/authMiddleware');
+const { authLimiter, moderateLimiter } = require('../middleware/rateLimiter');
 
 
-router.post('/signup', registerUser);
+router.post('/signup', authLimiter, registerUser);
 
-router.post('/signin', loginUser);
+router.post('/signin', authLimiter, loginUser);
 
-router.put('/update', authenticateToken, updateUserDetails);
+router.put('/update', authenticateToken, moderateLimiter, updateUserDetails);
 
-router.delete('/delete', authenticateToken, deleteUser);
+router.delete('/delete', authenticateToken, moderateLimiter, deleteUser);
 
 module.exports = router;
