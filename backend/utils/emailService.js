@@ -3,6 +3,9 @@ const createTransporter = require('../config/email');
 // Send OTP Email
 const sendOTPEmail = async (toEmail, otp, fullName) => {
     try {
+        if (!fullName) {
+            fullName = 'User';
+        }
         const transporter = createTransporter();
         const mailOptions = {
             from: process.env.GMAIL_USER,
@@ -11,7 +14,7 @@ const sendOTPEmail = async (toEmail, otp, fullName) => {
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2 style="color: #333;">Email Verification</h2>
-                    <p>Hi ${fullName},</p>
+                    <p>Dear ${fullName},</p>
                     <p>Your OTP code for email verification is:</p>
                     <div style="background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
                         ${otp}
@@ -34,6 +37,9 @@ const sendOTPEmail = async (toEmail, otp, fullName) => {
 // Send Welcome Email
 const sendWelcomeEmail = async (toEmail, fullName) => {
     try {
+        if (!fullName) {
+            fullName = 'User';
+        }
         const transporter = createTransporter();
         const mailOptions = {
             from: process.env.GMAIL_USER,
@@ -66,7 +72,7 @@ const sendWelcomeEmail = async (toEmail, fullName) => {
 };
 
 // Send Login Notification Email
-const sendLoginNotificationEmail = async (toEmail, fullName, loginDetails = {}) => {
+const sendLoginNotificationEmail = async (toEmail, fullName = {}) => {
     try {
         const transporter = createTransporter();
         const loginTime = new Date().toLocaleString();
@@ -75,20 +81,15 @@ const sendLoginNotificationEmail = async (toEmail, fullName, loginDetails = {}) 
             to: toEmail,
             subject: 'New Login to Your Account',
             html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #333;">New Login Detected</h2>
-                    <p>Hi ${fullName},</p>
-                    <p>We detected a new login to your account.</p>
-                    <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #2196F3; margin: 20px 0;">
-                        <p><strong>Login Time:</strong> ${loginTime}</p>
-                        <p><strong>IP Address:</strong> ${loginDetails.ip || 'Unknown'}</p>
-                        <p><strong>Device:</strong> ${loginDetails.device || 'Unknown'}</p>
-                    </div>
-                    <p>If this was you, you can safely ignore this email.</p>
-                    <p style="color: #d32f2f;"><strong>If this wasn't you, please change your password immediately and contact our support team.</strong></p>
-                    <br>
-                    <p>Best regards,<br>Eato Team</p>
-                </div>
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #333;">New Login Detected</h2>
+                <p>Hi ${fullName},</p>
+                <p>We detected a new login to your account on ${loginTime}.</p>
+                <p>If this was you, you can safely ignore this email.</p>
+                <p style="color: #d32f2f;"><strong>If this wasn't you, please change your password immediately or contact our support team.</strong></p>
+                <br>
+                <p>Best regards,<br>Eato Team</p>
+            </div>
             `
         };
         await transporter.sendMail(mailOptions);
@@ -194,10 +195,37 @@ const sendEmailChangeNotification = async (oldEmail, newEmail, fullName) => {
     }
 };
 
+const deleteAccountMessage = async (toEmail, fullName) => {
+    try {
+        const transporter = createTransporter();
+        const mailOptions = {
+            from: process.env.GMAIL_USER,
+            to: toEmail,
+            subject: 'Account Deletion Confirmation',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #d32f2f;">Account Deletion Confirmation</h2>
+                    <p>Hi ${fullName},</p>
+                    <p>We're sorry to see you go! Your account has been successfully deleted.</p>
+                    <p>If you have any feedback or questions, feel free to reach out to our support team.</p>
+                    <br>
+                    <p>Best regards,<br>Eato Team</p>
+                </div>
+            `
+        };
+        await transporter.sendMail(mailOptions);
+        return { success: true };
+    } catch (error) {
+        console.error('Error sending account deletion message:', error);
+        return { success: false, error: error.message };
+    }
+};
+
 module.exports = {
     sendOTPEmail,
     sendWelcomeEmail,
     sendLoginNotificationEmail,
     sendPasswordChangedEmail,
-    sendEmailChangeNotification
+    sendEmailChangeNotification,
+    deleteAccountMessage
 };

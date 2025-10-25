@@ -3,7 +3,14 @@ const sequelize = require('../config/database');
 const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
 
-const { clearUsersCache  } = require('../utils/cache');
+const { clearUsersCache } = require('../utils/cache');
+const { 
+    sendWelcomeEmail, 
+    sendLoginNotificationEmail,  
+    sendPasswordChangedEmail,
+    sendEmailChangeNotification,
+    deleteAccountMessage
+} = require('../utils/emailService');
 
 const registerUser = async (req, res) => {
     const transaction = await sequelize.transaction();
@@ -103,6 +110,18 @@ const registerUser = async (req, res) => {
                 return res.status(400).json({ error: 'Invalid admin secret code' });
             }
         }
+        const OTPModel = require('../models/otpModel');
+        const record = await OTPModel.findOne({
+            where: {
+                email: email,
+                action: 'signup',
+                verified: true
+            }
+        });
+        if (!record) {
+            await transaction.rollback();
+            return res.status(400).json({ error: 'Email not verified. Please verify your email before registering.' });
+        }
         // Insert new user into the database
         const newUser = await UserModel.create({
             first_name: firstName,
@@ -131,9 +150,11 @@ const registerUser = async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '28d' }
         );
+        // Send welcome email asynchronously
+        sendWelcomeEmail(email, `${firstName || ''} ${middleName || ''} ${lastName || ''}`.trim());
 
-        return res.status(201).json({ 
-            message: `User registered successfully${role === 'admin' ? ' as an admin' : ''}`, 
+        return res.status(201).json({
+            message: `User registered successfully${role === 'admin' ? ' as an admin' : ''}`,
             userDetails: userResponse,
             token: authToken
         });
@@ -219,7 +240,11 @@ const loginUser = async (req, res) => {
                 process.env.JWT_SECRET,
                 { expiresIn: '28d' }
             );
-
+            // Send login notification email asynchronously
+            sendLoginNotificationEmail(
+                userResponse.email,
+                `${userResponse.first_name || ''} ${userResponse.middle_name || ''} ${userResponse.last_name || ''}`.trim()
+            );
             return res.json({
                 message: 'Login successful',
                 user: userResponse,
@@ -275,7 +300,7 @@ const updateUserDetails = async (req, res) => {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for address' });
         }
-        if (currentPassword != null && typeof currentPassword !== 'string') {   
+        if (currentPassword != null && typeof currentPassword !== 'string') {
             await transaction.rollback();
             return res.status(400).json({ error: 'Invalid data type for current password' });
         }
@@ -364,7 +389,7 @@ const updateUserDetails = async (req, res) => {
         }
         if (contactNo !== null && contactNo !== userDetails.contact_no) userDetails.contact_no = contactNo;
         if (address !== null && address !== userDetails.address) userDetails.address = address;
-        if(currentPassword !== null && newPassword !== null) {
+        if (currentPassword !== null && newPassword !== null) {
             const isCurrentPasswordValid = await userDetails.validatePassword(currentPassword);
             if (!isCurrentPasswordValid) {
                 await transaction.rollback();
@@ -396,8 +421,18 @@ const updateUserDetails = async (req, res) => {
                 { expiresIn: '28d' }
             );
         }
-        return res.json({ 
-            message: 'User details updated successfully', 
+        // Clear users cache
+        clearUsersCache();
+        if(isEmailUpdated) {
+            // Send email change notification asynchronously
+            sendEmailChangeNotification(userDetails.email, updatedEmail, userDetails.first_name);
+        }
+        if(isPasswordChanged) {
+            // Send password changed email asynchronously
+            sendPasswordChangedEmail(userDetails.email, userDetails.first_name);
+        }
+        return res.json({
+            message: 'User details updated successfully',
             user: updatedUserDetails,
             // Return new token if email or password was changed otherwise no token
             ...(newAuthToken && { token: newAuthToken })
@@ -425,37 +460,33 @@ const deleteUser = async (req, res) => {
     try {
         // Get user ID from JWT token (set by authenticateToken middleware)
         const userId = req.user.id;
-
         let { password = null } = req.body;
-
         // Trim input values to remove leading/trailing spaces
         password = password ? password.trim() : null;
-
         // Password is required for confirmation
         if (!password) {
             return res.status(400).json({ error: 'Password is required for account deletion' });
         }
-
         // Password validation
         const passwordValidation = PasswordTest(password);
         if (!passwordValidation.valid) {
             return res.status(400).json({ error: passwordValidation.message });
         }
-
         // Find user by ID from token
         const userQuery = await UserModel.findByPk(userId);
-
         if (!userQuery) {
             return res.status(404).json({ error: 'User not found' });
         }
-
         // Verify password before deletion
         const isPasswordValid = await userQuery.validatePassword(password);
         if (!isPasswordValid) {
             return res.status(400).json({ error: 'Invalid password' });
         }
-
         await userQuery.destroy();
+        // Clear users cache
+        clearUsersCache();
+        // Send account deletion email asynchronously
+        deleteAccountMessage(userQuery.email, userQuery.first_name);
         return res.json({ message: 'User deleted successfully' });
     } catch (error) {
         console.error('Error deleting user:', error);

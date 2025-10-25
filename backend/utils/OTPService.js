@@ -1,71 +1,70 @@
-// In-memory OTP storage (for production, use Redis or database)
-const otpStorage = new Map();
+const OTPModel = require('../models/otpModel');
 
-// OTP expiry time in milliseconds (10 minutes)
-const OTPExpiryTime = 10 * 60 * 1000;
-
-// Generate 6-digit OTP
-const generateOTP = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
-// Store OTP with expiry time
-const storeOTP = (email, otp) => {
-    const expiryTime = Date.now() + OTPExpiryTime;
-    otpStorage.set(email.toLowerCase(), {
-        otp,
-        expiryTime,
-        attempts: 0
-    });
-};
-
-// Verify OTP
-const verifyOTP = (email, otp) => {
-    const emailKey = email.toLowerCase();
-    const otpData = otpStorage.get(emailKey);
-
-    if (!otpData) {
-        return { valid: false, error: 'OTP not found or expired. Please request a new OTP.' };
-    }
-
-    // Check if OTP has expired
-    if (Date.now() > otpData.expiryTime) {
-        otpStorage.delete(emailKey);
-        return { valid: false, error: 'OTP has expired. Please request a new OTP.' };
-    }
-
-    // Check attempt limit (max 3 attempts)
-    if (otpData.attempts >= 3) {
-        otpStorage.delete(emailKey);
-        return { valid: false, error: 'Maximum OTP verification attempts exceeded. Please request a new OTP.' };
-    }
-
-    // Verify OTP
-    if (otpData.otp === otp.trim()) {
-        otpStorage.delete(emailKey); // Remove OTP after successful verification
-        return { valid: true };
-    } else {
-        otpData.attempts += 1;
-        otpStorage.set(emailKey, otpData);
-        return { valid: false, error: `Invalid OTP. ${3 - otpData.attempts} attempts remaining.` };
-    }
-};
-
-// Clear expired OTPs periodically (cleanup function)
-const clearExpiredOTPs = () => {
-    const now = Date.now();
-    for (const [email, otpData] of otpStorage.entries()) {
-        if (now > otpData.expiryTime) {
-            otpStorage.delete(email);
+// Generate 6 digit OTP, and store it in the database
+const generateOTP = async (req, res) => {
+    try {
+        const { email = null } = req.body;
+        if (typeof email !== 'string') {
+            return res.status(400).json({ message: 'Invalid email format' });
         }
+        if (!email) {
+            return res.status(400).json({ message: 'Email is required' });
+        }
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiryTime = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+        // Send the OTP via email
+        const emailService = require('./emailService');
+        const emailResult = await emailService.sendOTPEmail(email, otp, 'User');
+        if (!emailResult) {
+            return res.status(500).json({ message: 'Failed to send OTP email' });
+        }
+        // Store the OTP and its expiry time in the database
+        await OTPModel.create({
+            email: email,
+            action: 'signup',
+            otp: otp,
+            expiry_time: expiryTime,
+            verified: false,
+            created_at: new Date(),
+            updated_at: new Date()
+        });
+        return res.status(200).json({ message: 'OTP generated and sent successfully', otp: otp });
+    } catch (error) {
+        console.error('Error generating OTP:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+}
+
+const VerifyOTP = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        const record = await OTPModel.findOne({
+            where: {
+                email: email,
+                action: 'signup',
+                verified: false
+            }
+        });
+        if (!record) {
+            return res.status(400).json({ message: 'OTP not found' });
+        }
+        if (record.otp !== otp) {
+            return res.status(400).json({ message: 'Invalid OTP' });
+        }
+        if (record.expiry_time < new Date()) {
+            return res.status(400).json({ message: 'OTP expired' });
+        }
+        // Mark OTP as verified
+        record.verified = true;
+        await record.save();
+        return res.status(200).json({ message: 'OTP verified successfully' });
+    } catch (error) {
+        console.error('Error verifying OTP:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
-
-// Run cleanup every 10 minutes
-setInterval(clearExpiredOTPs, 10 * 60 * 1000);
 
 module.exports = {
     generateOTP,
-    storeOTP,
-    verifyOTP
+    VerifyOTP
 };
